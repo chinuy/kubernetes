@@ -202,7 +202,7 @@ func NewServer(
 		server.InstallAuthFilter()
 	}
 	server.InstallDefaultHandlers()
-	if enableDebuggingHandlers {
+	if true {
 		server.InstallDebuggingHandlers(criHandler)
 		if enableContentionProfiling {
 			goruntime.SetBlockProfileRate(1)
@@ -302,6 +302,14 @@ func (s *Server) InstallDebuggingHandlers(criHandler http.Handler) {
 	glog.Infof("Adding debug handlers to kubelet server.")
 
 	ws := new(restful.WebService)
+	ws.
+		Path("/service")
+	ws.Route(ws.GET("/{svcNamespace}/{svcName}").
+		To(s.getService).
+		Operation("getService"))
+	s.restfulCont.Add(ws)
+
+	ws = new(restful.WebService)
 	ws.
 		Path("/run")
 	ws.Route(ws.POST("/{podNamespace}/{podID}/{containerName}").
@@ -596,10 +604,14 @@ type execRequestParams struct {
 	podUID        types.UID
 	containerName string
 	cmd           []string
+	svcNamespace  string
+	svcName       string
 }
 
 func getExecRequestParams(req *restful.Request) execRequestParams {
 	return execRequestParams{
+		svcNamespace:  req.PathParameter("svcNamespace"),
+		svcName:       req.PathParameter("svcName"),
 		podNamespace:  req.PathParameter("podNamespace"),
 		podName:       req.PathParameter("podID"),
 		podUID:        types.UID(req.PathParameter("uid")),
@@ -693,6 +705,24 @@ func (s *Server) getExec(request *restful.Request, response *restful.Response) {
 		return
 	}
 	proxyStream(response.ResponseWriter, request.Request, url)
+}
+
+// getService handles requests to list all service on this node
+func (s *Server) getService(request *restful.Request, response *restful.Response) {
+	params := getExecRequestParams(request)
+	pods, err := s.host.GetRunningPods()
+	if err != nil {
+		response.WriteError(http.StatusInternalServerError, err)
+		return
+	}
+
+	for _, p := range pods {
+		if strings.HasPrefix(p.ObjectMeta.Name, params.svcName+"-") {
+			writeJsonResponse(response, []byte("true"))
+			return
+		}
+	}
+	writeJsonResponse(response, []byte("false"))
 }
 
 // getRun handles requests to run a command inside a container.
