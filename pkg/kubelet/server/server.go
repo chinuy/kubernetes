@@ -168,6 +168,7 @@ type AuthInterface interface {
 // For testability.
 type HostInterface interface {
 	stats.StatsProvider
+	EvictPodByName(namespace, name string) (string, error)
 	GetVersionInfo() (*cadvisorapi.VersionInfo, error)
 	GetCachedMachineInfo() (*cadvisorapi.MachineInfo, error)
 	GetRunningPods() ([]*v1.Pod, error)
@@ -302,6 +303,14 @@ func (s *Server) InstallDebuggingHandlers(criHandler http.Handler) {
 	glog.Infof("Adding debug handlers to kubelet server.")
 
 	ws := new(restful.WebService)
+	ws.
+		Path("/evict")
+	ws.Route(ws.GET("/{podNamespace}/{podID}").
+		To(s.evictPod).
+		Operation("evictPod"))
+	s.restfulCont.Add(ws)
+
+	ws = new(restful.WebService)
 	ws.
 		Path("/service")
 	ws.Route(ws.GET("/{svcNamespace}/{svcName}").
@@ -707,6 +716,21 @@ func (s *Server) getExec(request *restful.Request, response *restful.Response) {
 	proxyStream(response.ResponseWriter, request.Request, url)
 }
 
+// evictPod
+func (s *Server) evictPod(request *restful.Request, response *restful.Response) {
+	params := getExecRequestParams(request)
+	pod, err := s.host.EvictPodByName(params.podNamespace, params.podName)
+	if err != nil {
+		response.WriteError(http.StatusInternalServerError, err)
+		return
+	}
+	if len(pod) > 0 {
+		writeJsonResponse(response, []byte(pod))
+	} else {
+		writeJsonResponse(response, []byte("false"))
+	}
+}
+
 // getService handles requests to list all service on this node
 func (s *Server) getService(request *restful.Request, response *restful.Response) {
 	params := getExecRequestParams(request)
@@ -718,7 +742,8 @@ func (s *Server) getService(request *restful.Request, response *restful.Response
 
 	for _, p := range pods {
 		if strings.HasPrefix(p.ObjectMeta.Name, params.svcName+"-") {
-			writeJsonResponse(response, []byte("true"))
+			pod, _ := s.host.GetPodByName(p.ObjectMeta.Namespace, p.ObjectMeta.Name)
+			writeJsonResponse(response, []byte(pod.Status.PodIP))
 			return
 		}
 	}

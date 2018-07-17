@@ -1594,6 +1594,20 @@ func (kl *Kubelet) RunInContainer(podFullName string, podUID types.UID, containe
 	return kl.runner.RunInContainer(container.ID, cmd, 0)
 }
 
+func (kl *Kubelet) EvictPodByName(namespace, name string) (string, error) {
+	glog.Infof("evict API called")
+	pod, ok := kl.GetPodByName(namespace, name)
+	if !ok {
+		return name, fmt.Errorf("cannot find the pod")
+	}
+
+	if kl.evictionManager.EvictPod(pod, 0, "pod evict by user", nil) {
+		return name, nil
+	} else {
+		return name, fmt.Errorf("evict pod failed")
+	}
+}
+
 // GetExec gets the URL the exec will be served from, or nil if the Kubelet will serve it.
 func (kl *Kubelet) GetExec(podFullName string, podUID types.UID, containerName string, cmd []string, streamOpts remotecommandserver.Options) (*url.URL, error) {
 	container, err := kl.findContainer(podFullName, podUID, containerName)

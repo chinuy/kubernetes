@@ -57,6 +57,8 @@ type Manager interface {
 	// Start starts the control loop to monitor eviction thresholds at specified interval.
 	Start(diskInfoProvider DiskInfoProvider, podFunc ActivePodsFunc, podCleanedUpFunc PodCleanedUpFunc, monitoringInterval time.Duration)
 
+	EvictPod(pod *v1.Pod, gracePeriodOverride int64, evictMsg string, annotations map[string]string) bool
+
 	// IsUnderMemoryPressure returns true if the node is under memory pressure.
 	IsUnderMemoryPressure() bool
 
