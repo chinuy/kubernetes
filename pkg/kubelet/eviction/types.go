@@ -58,6 +58,7 @@ type Manager interface {
 	Start(diskInfoProvider DiskInfoProvider, podFunc ActivePodsFunc, podCleanedUpFunc PodCleanedUpFunc, monitoringInterval time.Duration)
 
 	EvictPod(pod *v1.Pod, gracePeriodOverride int64, evictMsg string, annotations map[string]string) bool
+	DoEvictPodByMem(podFunc ActivePodsFunc, namespace string) string
 
 	// IsUnderMemoryPressure returns true if the node is under memory pressure.
 	IsUnderMemoryPressure() bool

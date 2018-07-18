@@ -169,6 +169,7 @@ type AuthInterface interface {
 type HostInterface interface {
 	stats.StatsProvider
 	EvictPodByName(namespace, name string) (string, error)
+	DoEvictPodByMem(namespace string) (string, error)
 	GetVersionInfo() (*cadvisorapi.VersionInfo, error)
 	GetCachedMachineInfo() (*cadvisorapi.MachineInfo, error)
 	GetRunningPods() ([]*v1.Pod, error)
@@ -303,6 +304,14 @@ func (s *Server) InstallDebuggingHandlers(criHandler http.Handler) {
 	glog.Infof("Adding debug handlers to kubelet server.")
 
 	ws := new(restful.WebService)
+	ws.
+		Path("/do_evict_by_mem")
+	ws.Route(ws.GET("").
+		To(s.doEvictPodByMem).
+		Operation("doEvictPodByMem"))
+	s.restfulCont.Add(ws)
+
+	ws = new(restful.WebService)
 	ws.
 		Path("/evict")
 	ws.Route(ws.GET("/{podNamespace}/{podID}").
@@ -714,6 +723,21 @@ func (s *Server) getExec(request *restful.Request, response *restful.Response) {
 		return
 	}
 	proxyStream(response.ResponseWriter, request.Request, url)
+}
+
+// evictPod ranking by memory usage
+func (s *Server) doEvictPodByMem(request *restful.Request, response *restful.Response) {
+	namespace := "functions"
+	pod, err := s.host.DoEvictPodByMem(namespace)
+	if err != nil {
+		response.WriteError(http.StatusInternalServerError, err)
+		return
+	}
+	if len(pod) > 0 {
+		writeJsonResponse(response, []byte(pod))
+	} else {
+		writeJsonResponse(response, []byte("false"))
+	}
 }
 
 // evictPod

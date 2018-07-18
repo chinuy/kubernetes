@@ -1773,3 +1773,12 @@ func (kl *Kubelet) hasHostMountPVC(pod *v1.Pod) bool {
 	}
 	return false
 }
+
+func (kl *Kubelet) DoEvictPodByMem(namespace string) (string, error) {
+	pod := kl.evictionManager.DoEvictPodByMem(kl.GetActivePods, namespace)
+	if pod != "" {
+		return pod, nil
+	} else {
+		return pod, fmt.Errorf("evict pod failed")
+	}
+}

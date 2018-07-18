@@ -569,3 +569,57 @@ func (m *managerImpl) evictPod(pod *v1.Pod, gracePeriodOverride int64, evictMsg 
 	}
 	return true
 }
+
+func (m *managerImpl) DoEvictPodByMem(podFunc ActivePodsFunc, namespace string) string {
+	pods := podFunc()
+
+	var candidatePods []*v1.Pod
+	for _, p := range pods {
+		if p.ObjectMeta.Namespace == namespace {
+			candidatePods = append(candidatePods, p)
+		}
+	}
+
+	updateStats := true
+	summary, err := m.summaryProvider.Get(updateStats)
+	if err != nil {
+		glog.Errorf("eviction manager: failed to get get summary stats: %v", err)
+		return ""
+	}
+	// make observations and get a function to derive pod usage stats relative to those observations.
+	_, statsFunc := makeSignalObservations(summary)
+
+	// rank the pods for eviction
+	rank := m.signalToRankFunc[evictionapi.SignalMemoryAvailable]
+
+	// the only candidates viable for eviction are those pods that had anything running.
+	if len(candidatePods) == 0 {
+		glog.Errorf("eviction manager: eviction thresholds have been met, but no pods are active to evict")
+		return ""
+	}
+
+	// rank the running pods for eviction for the specified resource
+	rank(candidatePods, statsFunc)
+
+	glog.Infof("eviction manager: pods ranked for eviction: %s", format.Pods(candidatePods))
+
+	//record age of metrics for met thresholds that we are using for evictions.
+	// for _, t := range thresholds {
+	// 	timeObserved := observations[t.Signal].time
+	// 	if !timeObserved.IsZero() {
+	// 		metrics.EvictionStatsAge.WithLabelValues(string(t.Signal)).Observe(metrics.SinceInMicroseconds(timeObserved.Time))
+	// 	}
+	// }
+
+	// we kill at most a single pod during each eviction interval
+	for i := range candidatePods {
+		pod := candidatePods[i]
+		gracePeriodOverride := int64(0)
+		message, annotations := evictionMessage("memory", pod, statsFunc)
+		if m.evictPod(pod, gracePeriodOverride, message, annotations) {
+			return "test"
+		}
+	}
+	glog.Infof("eviction manager: unable to evict any pods from the node")
+	return ""
+}
